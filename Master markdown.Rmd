@@ -1,5 +1,5 @@
 ---
-title: "Master"
+title: "Static site occupancy model - Unmarked"
 author: "Markus Fjellstad Israelsen"
 date: "25 januar 2018"
 output: word_document
@@ -9,22 +9,120 @@ output: word_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+Import detection/nondetection data and divide into year (to do single-season occupancy modelling on each year separately).
+Import matrix of sites and their latitude + longitude coordinates.
+Import line observations
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{r sp}
+yfjellrype = as.data.frame(x = sp)
+y2011 = yfjellrype[ , 1:20]
+y2012 = yfjellrype[, 21:40]
+y2013 = yfjellrype[, 41:60]
+y2014 = yfjellrype[, 61:80]
+y2015 = yfjellrype[, 81:100]
+y2016 = yfjellrype[, 101:120]
 
-```{r cars}
-summary(cars)
+library(readr)
+First_fjellrype_lat_long = read_csv("C:/Users/marku/Desktop/Master/Dataset/First fjellrype lat long.csv")
+View(First_fjellrype_lat_long)
+
+library(readr)
+Line_observations <- read_csv("C:/Users/marku/Desktop/Master/Dataset/Line observations.csv")
+View(Line_observations)
+
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+Load unmarked packages
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+library(unmarked)
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+Start with creating a vector containing the sites that are known to be occupied (for the "knownOcc" argument in the single-season model). First, the variable sitenum is created to identify which rownumber corresponds to which sitenumber (for instance, row [45] --> sitenumber 432)
+```{r}
+sitenum = c()
+sitenum = as.matrix(First_fjellrype_lat_long$RUTENR, ncol = 1)
+sitenum = matrix(sitenum, ncol = 1, dimnames = list(c(), c("site")))
+head(sitenum)
+
+```
+
+Identifying the rows for the known occupancy of the 2011 detection/nondetection data
+```{r}
+lineobs = data.frame(Line_observations)
+lineobs$Art = NULL
+line2011 = c()
+
+# for loop that appends the rows with the year 2011 to the variable line2011
+for (row in 1:nrow(lineobs)) {
+  sitenumber = lineobs[row, "RuteID"]
+  year  = lineobs[row, "Aar"]
+  
+  if(year == 2011) {
+    line2011 = append(line2011, lineobs[row, 1])
+  }
+}
+line2011 = matrix(line2011, ncol = 1)
+line2011 = cbind(line2011, rep(2011, length(line2011)))
+line2011 = cbind(line2011, rep(1, length(line2011[,1]))) # Adding 1 to all the entries of line 2011
+line2011 = matrix(line2011, ncol = 3, dimnames = list(c(), c("sitenumber", "year", "number")))
+line2011 = data.frame(line2011)
+
+# A for loop to identify the rows needed for the knownOccu argument in the Occu function of unmarked
+sitenum2011 = line2011$sitenumber
+count = 0
+row2011 = c()
+for(i in sitenum){
+  count = count + 1
+  if(any(i == sitenum2011)){
+    row2011 = append(row2011, count)
+  }
+}
+
+```
+
+
+Quick test to see if the know rows of detection is "approved" by the knownOcc argument in the occu function. 
+```{r}
+latitude = First_fjellrype_lat_long$Latitude
+longitude = First_fjellrype_lat_long$Longitude
+sitecovariates = First_fjellrype_lat_long[2:3]
+
+ptarmigan = unmarkedFrameOccu(y = y2011, siteCovs = sitecovariates)
+summary(ptarmigan)
+
+fm1 = occu(formula = ~ 1 ~ 1, data = ptarmigan, knownOcc = row2011)
+fm2 = occu(formula = ~ 1 ~ latitude + longitude, data = ptarmigan, knownOcc = row2011)
+fm3 = occu(formula = ~ 1 ~ latitude + longitude + latitude * longitude, data = ptarmigan, knownOcc = row2011)
+
+# Model selection
+fms = fitList('psi(.)p(.)' = fm1, 'psi(lat + long)p(.)' = fm2, 'psi(lat + long + lat*long)' = fm3)
+modSel(fms)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
