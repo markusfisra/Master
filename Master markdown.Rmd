@@ -13,8 +13,8 @@ knitr::opts_chunk$set(echo = TRUE)
 Import detection/nondetection data and divide into year (to do single-season occupancy modelling on each year separately).
 Import matrix of sites and their latitude + longitude coordinates.
 Import line observations
-
-```{r sp}
+Import masl, habitat and mean june temperatures for each site
+```{r}
 yfjellrype = as.data.frame(x = sp)
 y2011 = yfjellrype[ , 1:20]
 y2012 = yfjellrype[, 21:40]
@@ -31,16 +31,18 @@ library(readr)
 Line_observations <- read_csv("C:/Users/marku/Desktop/Master/Dataset/Line observations.csv")
 View(Line_observations)
 
+library(readr)
+Covariater_Midpunkt_UTMSone33 <- read_delim("C:/Users/marku/Desktop/Master/Dataset/Covariater_Midpunkt_UTMSone33.csv", 
+    ";", escape_double = FALSE, trim_ws = TRUE)
+View(Covariater_Midpunkt_UTMSone33)
+Covariater_Midpunkt_UTMSone33 = Covariater_Midpunkt_UTMSone33[- c(494), ]
 ```
 
 
 Load unmarked packages
-
 ```{r}
 library(unmarked)
-
 ```
-
 
 Start with creating a vector containing the sites that are known to be occupied (for the "knownOcc" argument in the single-season model). First, the variable sitenum is created to identify which rownumber corresponds to which sitenumber (for instance, row [45] --> sitenumber 432)
 ```{r}
@@ -57,7 +59,7 @@ lineobs = data.frame(Line_observations)
 lineobs$Art = NULL
 line2011 = c()
 
-# for loop that appends the rows with the year 2011 to the variable line2011
+# for loop that appends the rows from the line observations with the year 2011 to the variable line2011
 for (row in 1:nrow(lineobs)) {
   sitenumber = lineobs[row, "RuteID"]
   year  = lineobs[row, "Aar"]
@@ -85,35 +87,277 @@ for(i in sitenum){
 
 ```
 
-
-Quick test to see if the know rows of detection is "approved" by the knownOcc argument in the occu function. 
+Create variables for the unstandardized, original covariates 
 ```{r}
-latitude = First_fjellrype_lat_long$Latitude
-longitude = First_fjellrype_lat_long$Longitude
-sitecovariates = First_fjellrype_lat_long[2:3]
+sitenr = Covariater_Midpunkt_UTMSone33$RuteNr
+masl.orig = Covariater_Midpunkt_UTMSone33$HøydeOverHavet
+habitat.orig = Covariater_Midpunkt_UTMSone33$Norut_Habitat1_2
+precip.year.orig = Covariater_Midpunkt_UTMSone33$Årsnedbør
+avg.temp.june.orig = Covariater_Midpunkt_UTMSone33$Juni_Middeltemp
+latitude.orig = First_fjellrype_lat_long$Latitude
+longitude.orig = First_fjellrype_lat_long$Longitude
 
-ptarmigan = unmarkedFrameOccu(y = y2011, siteCovs = sitecovariates)
-summary(ptarmigan)
+```
 
-fm1 = occu(formula = ~ 1 ~ 1, data = ptarmigan, knownOcc = row2011)
-fm2 = occu(formula = ~ 1 ~ latitude + longitude, data = ptarmigan, knownOcc = row2011)
-fm3 = occu(formula = ~ 1 ~ latitude + longitude + latitude * longitude, data = ptarmigan, knownOcc = row2011)
+Overview of covariates
+```{r}
+covs = cbind(masl.orig, precip.year.orig, avg.temp.june.orig, latitude.orig, longitude.orig)
+par(mfrow = c(3,3))
+for(i in 1:5){
+hist(covs[,i], breaks = 50, col = "grey", main = colnames(covs)[i])
+}
+pairs(cbind(masl.orig, precip.year.orig, avg.temp.june.orig, latitude.orig, longitude.orig))
+```
 
-# Model selection
-fms = fitList('psi(.)p(.)' = fm1, 'psi(lat + long)p(.)' = fm2, 'psi(lat + long + lat*long)' = fm3)
-modSel(fms)
+Standardize the original covariates
+```{r}
+mean.masl = mean(masl.orig, na.rm = TRUE)
+mean.precip.year.orig = mean(precip.year.orig, na.rm = TRUE)
+mean.avg.temp.june.orig = mean(avg.temp.june.orig, na.rm = TRUE)
+mean.latitude.orig = mean(latitude.orig, na.rm= TRUE) # Right to do this with latitude?
+mean.longitude.orig = mean(longitude.orig, na.rm = TRUE) # Right to do this with longitude?
+
+sd.masl = sd(masl.orig, na.rm = TRUE)
+sd.precip.year.orig = sd(precip.year.orig, na.rm = TRUE)
+sd.avg.temp.june.orig = sd(avg.temp.june.orig, na.rm = TRUE)
+sd.latitude.orig = sd(latitude.orig, na.rm = TRUE)
+sd.longitude.orig = sd(longitude.orig, na.rm = TRUE)
+
+masl = (masl.orig - mean.masl) / sd.masl
+precip.year = (precip.year.orig - mean.precip.year.orig) / sd.precip.year.orig
+avg.temp.june = (avg.temp.june.orig - mean.avg.temp.june.orig) / sd.avg.temp.june.orig
+latitude = (latitude.orig - mean.latitude.orig) / sd.latitude.orig
+longitude = (longitude.orig - mean.longitude.orig) / sd.longitude.orig
+
+```
+
+Add detection/nondetection data and covariates together in a matrix, so it is possible to remove rows where there are missing covariate information. Create the covariate variables again based on the new dataset. 
+```{r}
+y2011.cov = cbind(y2011, masl, precip.year, avg.temp.june, latitude, longitude, habitat.orig)
+View(y2011.cov)
+
+y2011.cov = y2011.cov[complete.cases(y2011.cov[ , 21:25]),] # Removing rows where either of the covariates have NAs (including the y values)
+
+y2011.cov = y2011.cov[- c(480),] # Manually removed last row because the habitat.orig had a NA value in the last row that was not caught by the complete.cases function
+
+masl.2011 = y2011.cov$masl
+precip.2011 = y2011.cov$precip.year
+avg.temp.june.2011 = y2011.cov$avg.temp.june
+latitude.2011 = y2011.cov$latitude
+longitude.2011 = y2011.cov$longitude
+habitat.2011 = y2011.cov$habitat.orig
+
+```
+
+Create unmarkedFrameOccu by separating the sitecovariates from the observational covariates (did not include latitude and longitude this time). 
+umf is the model with yearly precipitation as observation covariate (not significant)
+umf2 is the model with habitat as observation covariate
+```{r}
+obs.precip.year = matrix(data = rep(precip.2011, 20), nrow = 479, ncol = 20)
+umf = unmarkedFrameOccu(y = y2011.cov[1:20], siteCovs = data.frame(masl.2011, avg.temp.june.2011, habitat.2011), obsCovs = list(obs.precip.year = obs.precip.year))
+summary(umf)
+
+obs.habitat.2011 = matrix(data = rep(habitat.2011, 20), nrow = 479, ncol = 20)
+umf2 = unmarkedFrameOccu(y = y2011.cov[1:20], siteCovs = data.frame(masl.2011, avg.temp.june.2011), obsCovs = list(obs.habitat.2011 = obs.habitat.2011))
+summary(umf2)
+
+```
+
+Model selection, first on the detection part, then on the occupancy part. See if precipitation affects the detection probability. 
+umf: The AIC shows the lowest score for constant detection prob. with precip having a AICdelta of 1.31 and precip + I(precip^2) a delta of 1.89. 
+umf2: NaNs produced! Need to look more into how to code a categorical variable as obs.cov
+```{r}
+# umf
+# formula = ~ detection ~ occupancy
+fm1 = occu(formula = ~ 1 ~ 1, data = umf, knownOcc = row2011)
+summary(fm1)
+
+fm2 = occu(formula = ~ obs.precip.year ~ 1, data = umf, knownOcc = row2011)
+summary(fm2)
+
+fm3 = occu(formula = ~ obs.precip.year + I(obs.precip.year^2) ~ 1, data = umf, knownOcc = row2011)
+summary(fm3)
+
+fm4 = occu(formula = ~ obs.precip.year + I(obs.precip.year^2) + I(obs.precip.year^3) ~ 1, data = umf, knownOcc = row2011)
+summary(fm4)
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+fms = fitList("p(.)psi(.)" = fm1,
+              "p(precip)psi(.)" = fm2,
+              "p(precip+precip2)psi(.)" = fm3,
+              "p(precip+precip2+precip3)psi(.)" = fm4)
+(model.sel = modSel(fms))
+
+# umf2
+fm5 = occu(formula = ~ 1 ~ 1, data = umf2, knownOcc = row2011)
+summary(fm5)
+
+fm6 = occu(formula = ~ obs.habitat.2011 ~ 1, data = umf2, knownOcc = row2011)
+summary(fm6)
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+fms2 = fitList("p(.)psi(.)" = fm5,
+              "p(habitat)psi(.)" = fm6)
+(model.sel2 = modSel(fms2))
+# NaNs produced! Do not think it worked the way you thought it would.
+
 ```
 
 
+Identifying the rows for the known occupancy of the 2012 detection/nondetection data
+```{r}
+line2012 = c()
 
+# for loop that appends the rows from the line observations with the year 2012 to the variable line2012
+for (row in 1:nrow(lineobs)) {
+  sitenumber = lineobs[row, "RuteID"]
+  year  = lineobs[row, "Aar"]
+  
+  if(year == 2012) {
+    line2012 = append(line2012, lineobs[row, 1])
+  }
+}
+line2012 = matrix(line2012, ncol = 1)
+line2012 = cbind(line2012, rep(2012, length(line2012)))
+line2012 = cbind(line2012, rep(1, length(line2012[,1]))) # Adding 1 to all the entries of line 2012
+line2012 = matrix(line2012, ncol = 3, dimnames = list(c(), c("sitenumber", "year", "number")))
+line2012 = data.frame(line2012)
 
+# A for loop to identify the rows needed for the knownOccu argument in the Occu function of unmarked
+sitenum2012 = line2012$sitenumber
+count = 0
+row2012 = c()
+for(i in sitenum){
+  count = count + 1
+  if(any(i == sitenum2012)){
+    row2012 = append(row2012, count)
+  }
+}
+```
 
+Identifying the rows for the known occupancy of the 2013 detection/nondetection data
+```{r}
+line2013 = c()
 
+# for loop that appends the rows from the line observations with the year 2013 to the variable line2013
+for (row in 1:nrow(lineobs)) {
+  sitenumber = lineobs[row, "RuteID"]
+  year  = lineobs[row, "Aar"]
+  
+  if(year == 2013) {
+    line2013 = append(line2013, lineobs[row, 1])
+  }
+}
+line2013 = matrix(line2013, ncol = 1)
+line2013 = cbind(line2013, rep(2013, length(line2013)))
+line2013 = cbind(line2013, rep(1, length(line2013[,1]))) # Adding 1 to all the entries of line 2013
+line2013 = matrix(line2013, ncol = 3, dimnames = list(c(), c("sitenumber", "year", "number")))
+line2013 = data.frame(line2013)
 
+# A for loop to identify the rows needed for the knownOccu argument in the Occu function of unmarked
+sitenum2013 = line2013$sitenumber
+count = 0
+row2013 = c()
+for(i in sitenum){
+  count = count + 1
+  if(any(i == sitenum2013)){
+    row2013 = append(row2013, count)
+  }
+}
+```
 
+Identifying the rows for the known occupancy of the 2014 detection/nondetection data
+```{r}
+line2014 = c()
 
+# for loop that appends the rows from the line observations with the year 2014 to the variable line2014
+for (row in 1:nrow(lineobs)) {
+  sitenumber = lineobs[row, "RuteID"]
+  year  = lineobs[row, "Aar"]
+  
+  if(year == 2014) {
+    line2014 = append(line2014, lineobs[row, 1])
+  }
+}
+line2014 = matrix(line2014, ncol = 1)
+line2014 = cbind(line2014, rep(2014, length(line2014)))
+line2014 = cbind(line2014, rep(1, length(line2014[,1]))) # Adding 1 to all the entries of line 2014
+line2014 = matrix(line2014, ncol = 3, dimnames = list(c(), c("sitenumber", "year", "number")))
+line2014 = data.frame(line2014)
 
+# A for loop to identify the rows needed for the knownOccu argument in the Occu function of unmarked
+sitenum2014 = line2014$sitenumber
+count = 0
+row2014 = c()
+for(i in sitenum){
+  count = count + 1
+  if(any(i == sitenum2014)){
+    row2014 = append(row2014, count)
+  }
+}
+```
 
+Identifying the rows for the known occupancy of the 2015 detection/nondetection data
+```{r}
+line2015 = c()
+
+# for loop that appends the rows from the line observations with the year 2015 to the variable line2015
+for (row in 1:nrow(lineobs)) {
+  sitenumber = lineobs[row, "RuteID"]
+  year  = lineobs[row, "Aar"]
+  
+  if(year == 2015) {
+    line2015 = append(line2015, lineobs[row, 1])
+  }
+}
+line2015 = matrix(line2015, ncol = 1)
+line2015 = cbind(line2015, rep(2015, length(line2015)))
+line2015 = cbind(line2015, rep(1, length(line2015[,1]))) # Adding 1 to all the entries of line 2015
+line2015 = matrix(line2015, ncol = 3, dimnames = list(c(), c("sitenumber", "year", "number")))
+line2015 = data.frame(line2015)
+
+# A for loop to identify the rows needed for the knownOccu argument in the Occu function of unmarked
+sitenum2015 = line2015$sitenumber
+count = 0
+row2015 = c()
+for(i in sitenum){
+  count = count + 1
+  if(any(i == sitenum2015)){
+    row2015 = append(row2015, count)
+  }
+}
+```
+
+Identifying the rows for the known occupancy of the 2016 detection/nondetection data
+```{r}
+line2016 = c()
+
+# for loop that appends the rows from the line observations with the year 2016 to the variable line2016
+for (row in 1:nrow(lineobs)) {
+  sitenumber = lineobs[row, "RuteID"]
+  year  = lineobs[row, "Aar"]
+  
+  if(year == 2016) {
+    line2016 = append(line2016, lineobs[row, 1])
+  }
+}
+line2016 = matrix(line2016, ncol = 1)
+line2016 = cbind(line2016, rep(2016, length(line2016)))
+line2016 = cbind(line2016, rep(1, length(line2016[,1]))) # Adding 1 to all the entries of line 2016
+line2016 = matrix(line2016, ncol = 3, dimnames = list(c(), c("sitenumber", "year", "number")))
+line2016 = data.frame(line2016)
+
+# A for loop to identify the rows needed for the knownOccu argument in the Occu function of unmarked
+sitenum2016 = line2016$sitenumber
+count = 0
+row2016 = c()
+for(i in sitenum){
+  count = count + 1
+  if(any(i == sitenum2016)){
+    row2016 = append(row2016, count)
+  }
+}
+```
 
 
 
