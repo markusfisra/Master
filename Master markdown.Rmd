@@ -149,25 +149,45 @@ habitat.2011 = y2011.cov$habitat.orig
 
 ```
 
+#### UnmarkedFrameOccu
 Create unmarkedFrameOccu by separating the sitecovariates from the observational covariates (did not include latitude and longitude this time). 
 umf is the model with yearly precipitation as observation covariate (not significant)
 umf2 is the model with habitat as observation covariate
+umf3 is the model with constant detection probability and variable occupancy
 ```{r}
+# umf: yearly precip. on detection prob
 obs.precip.year = matrix(data = rep(precip.2011, 20), nrow = 479, ncol = 20)
 umf = unmarkedFrameOccu(y = y2011.cov[1:20], siteCovs = data.frame(masl.2011, avg.temp.june.2011, habitat.2011), obsCovs = list(obs.precip.year = obs.precip.year))
 summary(umf)
 
+# umf2: habitat on detection prob
 obs.habitat.2011 = matrix(data = rep(habitat.2011, 20), nrow = 479, ncol = 20)
 umf2 = unmarkedFrameOccu(y = y2011.cov[1:20], siteCovs = data.frame(masl.2011, avg.temp.june.2011), obsCovs = list(obs.habitat.2011 = obs.habitat.2011))
 summary(umf2)
 
+# umf3: constant detection prob
+umf3 = unmarkedFrameOccu(y = y2011.cov[1:20], siteCovs = data.frame(masl.2011, avg.temp.june.2011, habitat.2011))
+summary(umf3)
+
+# umf4: mean june temp on detection prob.
+obs.avg.temp.june.2011 = matrix(data = rep(avg.temp.june.2011, 20), nrow = 479, ncol = 20)
+umf4 = unmarkedFrameOccu(y = y2011.cov[1:20], siteCovs = data.frame(masl.2011, avg.temp.june.2011, habitat.2011), obsCovs = list(obs.avg.temp.june.2011 = obs.avg.temp.june.2011))
+
+# umf5: elevation on detection prob
+obs.masl.2011 = matrix(data = rep(masl.2011, 20), nrow = 479, ncol = 20)
+umf5 = unmarkedFrameOccu(y = y2011.cov[1:20], siteCovs = data.frame(masl.2011, avg.temp.june.2011, habitat.2011), obsCovs = list(obs.masl.2011 = obs.masl.2011))
+
+# umf6: elevation and mean june temp on detection prob
+umf6 = unmarkedFrameOccu(y = y2011.cov[1:20], siteCovs = data.frame(masl.2011, avg.temp.june.2011, habitat.2011), obsCovs = list(obs.masl.2011 = obs.masl.2011, obs.avg.temp.june.2011 = obs.avg.temp.june.2011))
+
+
 ```
 
-Model selection, first on the detection part, then on the occupancy part. See if precipitation affects the detection probability. 
+#### Model selection on the detection part. 
 umf: The AIC shows the lowest score for constant detection prob. with precip having a AICdelta of 1.31 and precip + I(precip^2) a delta of 1.89. 
 umf2: NaNs produced! Need to look more into how to code a categorical variable as obs.cov
 ```{r}
-# umf
+# umf, effect of yearly precipitation on detection prob.
 # formula = ~ detection ~ occupancy
 fm1 = occu(formula = ~ 1 ~ 1, data = umf, knownOcc = row2011)
 summary(fm1)
@@ -188,7 +208,7 @@ fms = fitList("p(.)psi(.)" = fm1,
               "p(precip+precip2+precip3)psi(.)" = fm4)
 (model.sel = modSel(fms))
 
-# umf2
+# umf2, effect of habitat on detection prob
 fm5 = occu(formula = ~ 1 ~ 1, data = umf2, knownOcc = row2011)
 summary(fm5)
 
@@ -201,7 +221,248 @@ fms2 = fitList("p(.)psi(.)" = fm5,
 (model.sel2 = modSel(fms2))
 # NaNs produced! Do not think it worked the way you thought it would.
 
+# umf4, effect of mean june temp on detection prob
+dmod1 = occu(formula = ~ 1 ~ 1, data = umf4, knownOcc = row2011)
+
+dmod2 = occu(formula = ~ obs.avg.temp.june.2011 ~ 1, data = umf4, knownOcc = row2011)
+
+dmod3 = occu(formula = ~ obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) ~ 1, data = umf4, knownOcc = row2011)
+
+dmod4 = occu(formula = ~ obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) + I(obs.avg.temp.june.2011^3) ~ 1, data = umf4, knownOcc = row2011)
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+dms1 = fitList("p(.)psi(.)" = dmod1,
+               "p(temp)psi(.)" = dmod2,
+               "p(temp + temp2)psi(.)" = dmod3,
+               "p(temp + temp2 + temp3)psi(.)" = dmod4)
+(dmodel.sel1 = modSel(dms1))
+# Model 4 best, but only with AICdelta of 0.27 to model 3 which has 1 less parameter and is the one I will choose? 
+
+# umf5, effect of mean june temp on detection prob
+dmod5 = occu(formula = ~ 1 ~ 1, data = umf5, knownOcc = row2011) 
+
+dmod6 = occu(formula = ~ obs.masl.2011 ~ 1, data = umf5, knownOcc = row2011)
+
+dmod7 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) ~ 1, data = umf5, knownOcc = row2011)
+
+dmod8 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + I(obs.masl.2011^3) ~ 1, data = umf5, knownOcc = row2011)
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+dms2 = fitList("p(.)psi(.)" = dmod5,
+               "p(elev)psi(.)" = dmod6,
+               "p(elev + elev2)psi(.)" = dmod7,
+               "p(elev + elev2 + elev3)psi(.)" = dmod8)
+(dmodel.sel2 = modSel(dms2))
+
+# umf6, effect of elevation and mean june temp on detection prob
+dmod9 = occu(formula = ~ 1 ~ 1, data = umf6, knownOcc = row2011) 
+
+dmod10 = occu(formula = ~ obs.masl.2011 ~ 1, data = umf6, knownOcc = row2011)
+
+dmod11 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) ~ 1, data = umf6, knownOcc = row2011)
+
+dmod12 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + I(obs.masl.2011^3) ~ 1, data = umf6, knownOcc = row2011)
+
+dmod13 = occu(formula = ~ obs.avg.temp.june.2011 ~ 1, data = umf6, knownOcc = row2011)
+
+dmod14 = occu(formula = ~ obs.masl.2011 + obs.avg.temp.june.2011 ~ 1, data = umf6, knownOcc = row2011)
+
+dmod15 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + obs.avg.temp.june.2011 ~ 1, data = umf6, knownOcc = row2011)
+
+dmod16 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + I(obs.masl.2011^3) + obs.avg.temp.june.2011 ~ 1, data = umf6, knownOcc = row2011)
+
+dmod17 = occu(formula = ~ obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) ~ 1, data = umf6, knownOcc = row2011)
+
+dmod18 = occu(formula = ~ obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) + I(obs.avg.temp.june.2011^3) ~ 1, data = umf6, knownOcc = row2011)
+
+dmod19 = occu(formula = ~ obs.masl.2011 + obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) ~ 1, data = umf6, knownOcc = row2011)
+
+dmod20 = occu(formula = ~ obs.masl.2011 + obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) + I(obs.avg.temp.june.2011^3) ~ 1, data = umf6, knownOcc = row2011)
+
+dmod21 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) ~ 1, data = umf6, knownOcc = row2011)
+
+dmod22 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + I(obs.masl.2011^3) + obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) ~ 1, data = umf6, knownOcc = row2011)
+
+dmod23 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) + I(obs.avg.temp.june.2011^3) ~ 1, data = umf6, knownOcc = row2011)
+
+dmod24 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + I(obs.masl.2011^3) + obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) + I(obs.avg.temp.june.2011^3) ~ 1, data = umf6, knownOcc = row2011)
+
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+dms3 = fitList("p(.)psi(.)" = dmod9,
+               "p(elev)psi(.)" = dmod10,
+               "p(elev + elev2)psi(.)" = dmod11,
+               "p(elev + elev2 + elev3)psi(.)" = dmod12,
+               "p(temp)psi(.)" = dmod13,
+               "p(elev + temp)psi(.)" = dmod14,
+               "p(elev + elev2 + temp)psi(.)" = dmod15,
+               "p(elev + elev2 + elev3 + temp)psi(.)" = dmod16,
+               "p(temp + temp2)psi(.)" = dmod17,
+               "p(temp + temp2 + temp3)psi(.)" = dmod18,
+               "p(elev + temp + temp2)psi(.)" = dmod19,
+               "p(elev + temp + temp2 + temp3)psi(.)" = dmod20,
+               "p(elev + elev2 + temp + temp2)psi(.)" = dmod21,
+               "p(elev + elev2 + elev3 + temp + temp2)psi(.)" = dmod22,
+               "p(elev + elev2 + temp + temp2 + temp3)psi(.)" = dmod23,
+               "p(elev + elev2 + elev3 + temp + temp2 + temp3)psi(.)" = dmod24)
+(dmodel.sel3 = modSel(dms3))
+
 ```
+
+The model with temperature as a covariate of detection probability has substantial support. The model without temp has an AICdelta > 10 and therefore essentially has no support. 
+
+                              nPars    AIC delta  AICwt cumltvWt
+p(temp + temp2 + temp3)psi(.)     5 284.82  0.00 0.5247     0.52
+p(temp + temp2)psi(.)             4 285.09  0.27 0.4581     0.98
+p(temp)psi(.)                     3 291.94  7.12 0.0149     1.00
+p(.)psi(.)                        2 295.74 10.92 0.0022     1.00
+
+The model with elevation as a covariate of detection probability has substantial support. The model without elev has an AICdelta = 8.01 and therefore essentially has no support. 
+
+                              nPars    AIC delta AICwt cumltvWt
+p(elev + elev2)psi(.)             4 287.73  0.00 0.709     0.71
+p(elev + elev2 + elev3)psi(.)     5 289.70  1.97 0.264     0.97
+p(elev)psi(.)                     3 295.63  7.90 0.014     0.99
+p(.)psi(.)                        2 295.74  8.01 0.013     1.00
+
+The AIC values for model selection with both elevation and temperature showed that model 21 was the best (p(elev + elev2 + temp + temp2)psi(.)). This is the model I will go forward with now, and see how this affects the occupancy models below. 
+
+#### Model selection on the occupancy part
+fms3: the model with the lowest AIC score was elev + elev2. But both the model with elev + elev2 + elev3 (AICdelta = 0.45) and the one with constant psi (AICdelta = 1.89) is under a AICdelta of 2, which means that they are not significantly different??
+fms4: Shows that the most complex model (fm16) is the best one. However, NaNs (not a number) were produced, and how this affects the result I'm not sure. Also, the correlation between 'masl.2011' and 'avg.temp.june.2011' = -0.4461618, and this is quite high, and could therefore affect the results I'm getting?
+```{r}
+# formula = ~ detection ~ occupancy
+# Looking for the effects of elevation first
+fm7 = occu(formula = ~ 1 ~ 1, data = umf3, knownOcc = row2011)
+summary(fm7)
+
+fm8 = occu(formula = ~ 1 ~ masl.2011, data = umf3, knownOcc = row2011)
+summary(fm8)
+
+fm9 = occu(formula = ~ 1 ~ masl.2011 + I(masl.2011^2), data = umf3, knownOcc = row2011)
+
+fm10 = occu(formula = ~ 1 ~ masl.2011 + I(masl.2011^2) + I(masl.2011^3), data = umf3, knownOcc = row2011)
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+fms3 = fitList("p(.)psi(.)" = fm7,
+              "p(.)psi(elevation)" = fm8,
+              "p(.)psi(elevation + elevation2)" = fm9,
+              "p(.)psi(elevation + elevation2 + elevation3)" = fm10)
+(model.sel3 = modSel(fms3))
+# Model 9 best
+
+# Look for the effects of mean june temperature
+
+fm11 = occu(formula = ~ 1 ~ avg.temp.june.2011, data = umf3, knownOcc = row2011)
+
+fm12 = occu(formula = ~ 1 ~ avg.temp.june.2011 + I(avg.temp.june.2011^2), data = umf3, knownOcc = row2011)
+
+fm13 = occu(formula = ~ 1 ~ avg.temp.june.2011 + I(avg.temp.june.2011^2) + I(avg.temp.june.2011^3), data = umf3, knownOcc = row2011) 
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+fms4 = fitList("p(.)psi(.)" = fm7,
+              "p(.)psi(temp)" = fm11,
+              "p(.)psi(temp + temp2)" = fm12,
+              "p(.)psi(temp + temp2 + temp3)" = fm13)
+
+(model.sel4 = modSel(fms4))
+# Model 13 best
+
+# Look for the effects of habitat
+fm14 = occu(formula = ~ 1 ~ habitat.2011, data = umf3, knownOcc = row2011)
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+fms5 = fitList("p(.)psi(.)" = fm7,
+              "p(.)psi(habitat)" = fm14)
+
+(model.sel5 = modSel(fms5))
+# Model 14 with habitat cleary the best with AICdelta = 5.16
+
+# Look for the effects of elevation when elevation and temp are in the detection prob.
+fm15 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) ~ masl.2011, data = umf6, knownOcc = row2011)
+
+fm16 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) ~ masl.2011 + I(masl.2011^2), data = umf6, knownOcc = row2011)
+
+fm17 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) ~ masl.2011 + I(masl.2011^2) + I(masl.2011^3), data = umf6, knownOcc = row2011)
+
+fms6 = fitList("p(elev + elev2 + temp + temp2)psi(.)" = dmod21,
+               "p(elev + elev2 + temp + temp2)psi(elev)" = fm15,
+               "p(elev + elev2 + temp + temp2)psi(elev + elev2)" = fm16,
+               "p(elev + elev2 + temp + temp2)psi(elev + elev2 + elev3)" = fm17)
+(model.sel6 = modSel(fms6))
+
+# Look for the effects of temperature when elevation and temp are in the detection prob.
+fm18 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) ~ avg.temp.june.2011, data = umf6, knownOcc = row2011)
+
+fm19 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) ~ avg.temp.june.2011 + I(avg.temp.june.2011^2), data = umf6, knownOcc = row2011)
+
+fm20 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) ~ avg.temp.june.2011 + I(avg.temp.june.2011^2) + I(avg.temp.june.2011^3), data = umf6, knownOcc = row2011)
+
+fms7 = fitList("p(elev + elev2 + temp + temp2)psi(.)" = dmod21,
+               "p(elev + elev2 + temp + temp2)psi(temp)" = fm18,
+               "p(elev + elev2 + temp + temp2)psi(temp + temp2)" = fm19,
+               "p(elev + elev2 + temp + temp2)psi(temp + temp2 + temp3)" = fm20)
+(model.sel7 = modSel(fms7))
+
+# Look for the effects of habitat when elevation and temp are in the detection prob.
+fm21 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) ~ habitat.2011, data = umf6, knownOcc = row2011)
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+fms8 = fitList("p(elev + elev2 + temp + temp2)psi(.)" = dmod21,
+              "p(elev + elev2 + temp + temp2)psi(habitat)" = fm21)
+
+(model.sel8 = modSel(fms8))
+
+```
+
+Model selection tables. Looking for effects of the covariates elevation, temperature and habitat. An AICdelta < 2 between models is generally considered to have a substantial level of empirical support. 
+
+Model selection for the effects of elevation on occupancy (constant detection probability): For the elevation example, the first two models have elevation included and adding the weights of these two gives a cumulative weight of 0.77 and this gives substantial support to the elevation hypothesis.
+
+                                             nPars  AIC   delta   AICwt   cumltvWt
+p(.)psi(elevation + elevation2)                  4 293.85  0.00   0.428     0.43
+p(.)psi(elevation + elevation2 + elevation3)     5 294.31  0.45   0.342     0.77
+p(.)psi(.)                                       2 295.74  1.89   0.167     0.94
+p(.)psi(elevation)                               3 297.68  3.83   0.063     1.00
+
+Model selection for the effects of mean june temperature on occupancy (constant detection probability): Here, the model without temperature essentially have no support (AICdelta > 10).The first two models show an AICdelta < 2, and I am therefore want to choose the second model as there are fewer parameters in this model, but there might be biological reasons for the first model that I cannot see at the moment.  
+
+                                             nPars  AIC   delta   AICwt     cumltvWt
+p(.)psi(temp + temp2 + temp3)                    5 278.18  0.00   0.64         0.64
+p(.)psi(temp)                                    3 279.96  1.78   0.26         0.90
+p(.)psi(temp + temp2)                            4 281.87  3.68   0.1          1.00
+p(.)psi(.)                                       2 295.74 17.56   0.000098     1.00
+
+Model selection for the effects of habitat on occupancy (constant detection probability): Here, habitat is included in the model just as they are noted in the dataset, as a factor with 5 levels (Annet, fjellveg., skogveg., bre, myr). I am currently unsure if I should do anything to this covariate (0,0,0,0,0 ; 1,0,0,0,0 ; ... ; 1,1,1,1,0) or keep as is. The AIC shows substantial support for habitat to be included into the final model.
+
+                                             nPars  AIC   delta   AICwt   cumltvWt
+p(.)psi(habitat)                                 6 290.58  0.00   0.93     0.93
+p(.)psi(.)                                       2 295.74  5.16   0.07     1.00
+
+
+Model selection for the effects of elevation on occupancy (detection prob = elev+elev2+temp+temp2): Here, the AIC values show that the models with elevation included does not have substantial support. 
+
+                                                        nPars    AIC delta AICwt cumltvWt
+p(elev + elev2 + temp + temp2)psi(.)                        6 270.43  0.00  0.49     0.49
+p(elev + elev2 + temp + temp2)psi(elev)                     7 271.75  1.33  0.25     0.74
+p(elev + elev2 + temp + temp2)psi(elev + elev2 + elev3)     9 272.70  2.27  0.16     0.90
+p(elev + elev2 + temp + temp2)psi(elev + elev2)             8 273.55  3.12  0.10     1.00
+
+Model selection for the effects of mean june temperature on occupancy (detection prob = elev+elev2+temp+temp2): Here, the AIC values show that the model with temperature included do have substantial support. The best model (temp+temp2+temp3) is only marginally better than the model with only temp, therefore I think it is best to continue with the model with only temp (model fm18).
+
+                                                        nPars    AIC delta AICwt cumltvWt
+p(elev + elev2 + temp + temp2)psi(temp + temp2 + temp3)     9 267.77  0.00  0.46     0.46
+p(elev + elev2 + temp + temp2)psi(temp)                     7 268.63  0.86  0.30     0.76
+p(elev + elev2 + temp + temp2)psi(.)                        6 270.43  2.66  0.12     0.89
+p(elev + elev2 + temp + temp2)psi(temp + temp2)             8 270.57  2.80  0.11     1.00
+
+Model selection for the effects of habitat on occupancy (detection prob = elev+elev2+temp+temp2): Difficult to say if habitat should be included as the AICdelta < 2 between the two different models. 
+
+                                           nPars    AIC delta AICwt cumltvWt
+p(elev + elev2 + temp + temp2)psi(.)           6 270.43  0.00  0.71     0.71
+p(elev + elev2 + temp + temp2)psi(habitat)    10 272.20  1.77  0.29     1.00
+
+
 
 
 Identifying the rows for the known occupancy of the 2012 detection/nondetection data
