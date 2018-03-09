@@ -51,7 +51,7 @@ library(unmarked)
 ```
 
 
-Start with creating a vector containing the sites that are known to be occupied (for the "knownOcc" argument in the single-season model). First, the variable sitenum is created to identify which rownumber corresponds to which sitenumber (for instance, row [45] --> sitenumber 432)
+Start with creating a vector containing the sites that are known to be occupied (for the "knownOcc" argument in the single-season model). First, the variable sitenum is created to be able to identify which rownumber corresponds to which sitenumber (for instance, row [45] --> sitenumber 432)
 ```{r}
 sitenum = c()
 sitenum = as.matrix(First_fjellrype_lat_long$RUTENR, ncol = 1)
@@ -78,8 +78,7 @@ for (row in 1:nrow(lineobs)) {
 }
 line2011 = matrix(line2011, ncol = 1)
 line2011 = cbind(line2011, rep(2011, length(line2011)))
-line2011 = cbind(line2011, rep(1, length(line2011[,1]))) # Adding 1 to all the entries of line 2011
-line2011 = matrix(line2011, ncol = 3, dimnames = list(c(), c("sitenumber", "year", "number")))
+line2011 = matrix(line2011, ncol = 2, dimnames = list(c(), c("sitenumber", "year")))
 line2011 = data.frame(line2011)
 
 # A for loop to identify the rows needed for the knownOccu argument in the Occu function of unmarked
@@ -95,19 +94,17 @@ for(i in sitenum){
 
 ```
 
-
 Create variables for the unstandardized, original covariates 
 ```{r}
 sitenr = Covariater_Midpunkt_UTMSone33$RuteNr
-masl.orig = Covariater_Midpunkt_UTMSone33$HøydeOverHavet
+masl.orig = Covariater_Midpunkt_UTMSone33$H?ydeOverHavet
 habitat.orig = Covariater_Midpunkt_UTMSone33$Norut_Habitat1_2
-precip.year.orig = Covariater_Midpunkt_UTMSone33$Årsnedbør
+precip.year.orig = Covariater_Midpunkt_UTMSone33$?rsnedb?r
 avg.temp.june.orig = Covariater_Midpunkt_UTMSone33$Juni_Middeltemp
 latitude.orig = First_fjellrype_lat_long$Latitude
 longitude.orig = First_fjellrype_lat_long$Longitude
 
 ```
-
 
 Overview of covariates
 ```{r}
@@ -145,9 +142,11 @@ longitude = (longitude.orig - mean.longitude.orig) / sd.longitude.orig
 
 Add detection/nondetection data and covariates together in a matrix, which makes it possible to remove the rows where there are missing covariate information. 
 Overwrite the covariate variables based on the new dataset.
+THE OCCU FUNCTION ONLY REMOVES ROWS WITH ALL NA's
 ```{r}
-y2011.cov = cbind(y2011, masl, precip.year, avg.temp.june, latitude, longitude, habitat.orig)
+y2011.cov = cbind(y2011, masl, precip.year, avg.temp.june, latitude, longitude, habitat.orig, sitenr)
 View(y2011.cov)
+y2011.cov = cbind(y2011, masl.orig, precip.year.orig, avg.temp.june.orig, latitude.orig, longitude.orig, habitat.orig, sitenr)
 
 y2011.cov = y2011.cov[complete.cases(y2011.cov[ , 21:25]),] # Removing rows where either of the covariates have NAs (including the y values)
 
@@ -160,11 +159,22 @@ latitude.2011 = y2011.cov$latitude
 longitude.2011 = y2011.cov$longitude
 habitat.2011 = y2011.cov$habitat.orig
 latitude.2011 = y2011.cov$latitude
+sitenr.2011 = y2011.cov$sitenr
+
+masl.2011 = y2011.cov$masl.orig
+precip.2011 = y2011.cov$precip.year.orig
+avg.temp.june.2011 = y2011.cov$avg.temp.june.orig
+latitude.2011 = y2011.cov$latitude.orig
+longitude.2011 = y2011.cov$longitude.orig
+habitat.2011 = y2011.cov$habitat.orig
+latitude.2011 = y2011.cov$latitude.orig
+sitenr.2011 = y2011.cov$sitenr
+
+
 
 ```
 
-
-#### UnmarkedFrameOccu
+#### UnmarkedFrameOccu - 2011
 Create unmarkedFrameOccu by separating the sitecovariates from the observational covariates
 ```{r}
 # Create the covariates for 'obsCovs', as they need to be in a matrix form
@@ -172,20 +182,21 @@ obs.habitat.2011 = matrix(data = rep(habitat.2011, 20), nrow = 479, ncol = 20)
 obs.avg.temp.june.2011 = matrix(data = rep(avg.temp.june.2011, 20), nrow = 479, ncol = 20)
 obs.masl.2011 = matrix(data = rep(masl.2011, 20), nrow = 479, ncol = 20)
 
-# UnmakredFrameOccu
+# UnmarkedFrameOccu
 umf = unmarkedFrameOccu(y = y2011.cov[1:20], siteCovs = data.frame(masl.2011, avg.temp.june.2011, habitat.2011, latitude.2011), obsCovs = list(obs.masl.2011 = obs.masl.2011, obs.avg.temp.june.2011 = obs.avg.temp.june.2011, obs.habitat.2011 = obs.habitat.2011))
+
 ```
 
 
-#### Model selection on the detection part. 
+#### Model selection on the detection part - 2011. 
 ```{r}
 # formula = ~ detection ~ occupancy
 
 # Effect of habitat on detection prob
 dmod1 = occu(formula = ~ 1 ~ 1, data = umf, knownOcc = row2011)
-
+summary(dmod1)
 dmod2 = occu(formula = ~ obs.habitat.2011 ~ 1, data = umf, knownOcc = row2011)
-
+summary(dmod2)
 # Insert the fitted models into a "fitList" and rank them by AIC
 fms = fitList("p(.)psi(.)" = dmod1,
               "p(habitat)psi(.)" = dmod2)
@@ -315,27 +326,8 @@ dms5 = fitList("p(.)psi(.)" = dmod9,
 
 ```
 
-The model with temperature as a covariate of detection probability has substantial support. The model without temp has an AICdelta > 10 and therefore essentially has no support. 
 
-                              nPars    AIC delta  AICwt cumltvWt
-p(temp + temp2 + temp3)psi(.)     5 284.82  0.00 0.5247     0.52
-p(temp + temp2)psi(.)             4 285.09  0.27 0.4581     0.98
-p(temp)psi(.)                     3 291.94  7.12 0.0149     1.00
-p(.)psi(.)                        2 295.74 10.92 0.0022     1.00
-
-The model with elevation as a covariate of detection probability has substantial support. The model without elev has an AICdelta = 8.01 and therefore essentially has no support. 
-
-                              nPars    AIC delta AICwt cumltvWt
-p(elev + elev2)psi(.)             4 287.73  0.00 0.709     0.71
-p(elev + elev2 + elev3)psi(.)     5 289.70  1.97 0.264     0.97
-p(elev)psi(.)                     3 295.63  7.90 0.014     0.99
-p(.)psi(.)                        2 295.74  8.01 0.013     1.00
-
-The AIC values for model selection with both elevation and temperature showed that dmod28 was the best (p(elev + elev2 + temp + temp2 + elev:temp + elev2:temp + elev:temp2)psi(.)). However, this model also has 9 parameters, which might be too much (error message later on).
-
-
-#### Model selection on the occupancy part
-
+#### Model selection on the occupancy part - 2011
 The correlation between 'masl.2011' and 'avg.temp.june.2011' = -0.4461618, and this is quite high, and could therefore affect the results I'm getting?
 ```{r}
 # formula = ~ detection ~ occupancy
@@ -415,68 +407,21 @@ oms6 = fitList("p(elev + elev2 + temp + temp2 + elev:temp + elev2:temp + elev:te
 (omodel.sel6 = modSel(oms6))
 
 # Pick the best elevation occupancy model and then look for the effects of temperature and habitat
-#om16 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) + obs.masl.2011:obs.avg.temp.june.2011 + I(obs.masl.2011^2):obs.avg.temp.june.2011 + obs.masl.2011:I(obs.avg.temp.june.2011^2) ~ obs.masl.2011 + I(obs.masl.2011^2), data = umf, knownOcc = row2011)
+om16 = occu(formula = ~ obs.masl.2011 + I(obs.masl.2011^2) + obs.avg.temp.june.2011 + I(obs.avg.temp.june.2011^2) + obs.masl.2011:obs.avg.temp.june.2011 + I(obs.masl.2011^2):obs.avg.temp.june.2011 + obs.masl.2011:I(obs.avg.temp.june.2011^2) ~ obs.masl.2011 + I(obs.masl.2011^2), data = umf, knownOcc = row2011)
 # "ERROR: Hessian is singular. Try providing starting values or using fewer covariates."
+
+
 
 ```
 
-Model selection tables. Looking for effects of the covariates elevation, temperature and habitat. An AICdelta < 2 between models is generally considered to have a substantial level of empirical support. 
-
-Model selection for the effects of elevation on occupancy (constant detection probability): For the elevation example, the first two models have elevation included and adding the weights of these two gives a cumulative weight of 0.77 and this gives substantial support to the elevation hypothesis.
-
-                                             nPars  AIC   delta   AICwt   cumltvWt
-p(.)psi(elevation + elevation2)                  4 293.85  0.00   0.428     0.43
-p(.)psi(elevation + elevation2 + elevation3)     5 294.31  0.45   0.342     0.77
-p(.)psi(.)                                       2 295.74  1.89   0.167     0.94
-p(.)psi(elevation)                               3 297.68  3.83   0.063     1.00
 
 
-Model selection for the effects of mean june temperature on occupancy (constant detection probability): Here, the model without temperature essentially have no support (AICdelta > 10).The first two models show an AICdelta < 2, and I therefore want to choose the second model as there are fewer parameters in this model, but there might be biological reasons for the first model that I cannot see at the moment?
-
-                                             nPars  AIC   delta   AICwt     cumltvWt
-p(.)psi(temp + temp2 + temp3)                    5 278.18  0.00   0.64         0.64
-p(.)psi(temp)                                    3 279.96  1.78   0.26         0.90
-p(.)psi(temp + temp2)                            4 281.87  3.68   0.1          1.00
-p(.)psi(.)                                       2 295.74 17.56   0.000098     1.00
-
-
-Model selection for the effects of habitat on occupancy (constant detection probability): Here, habitat is included in the model just as they are noted in the dataset, as a factor with 5 levels (Annet, fjellveg., skogveg., bre, myr). I am currently unsure if I should do anything to this covariate (0,0,0,0,0 ; 1,0,0,0,0 ; ... ; 1,1,1,1,0) or keep as is. The AIC shows substantial support for habitat to be included into the final model.
-
-                 nPars    AIC delta AICwt cumltvWt
-p(.)psi(habitat)     6 290.58  0.00  0.93     0.93
-p(.)psi(.)           2 295.74  5.16  0.07     1.00
-
-
-Model selection for the effects of elevation on occupancy (detection prob = elev+elev2+temp+temp2+elev:temp+elev2:temp+elev:temp2): Here, the AIC values show that the models with elevation included have substantial support. 
-
-                                                                                              nPars    AIC delta AICwt cumltvWt
-p(elev + elev2 + temp + temp2 + elev:temp + elev2:temp + elev:temp2)psi(elev + elev2)            11 258.81  0.00 0.474     0.47
-p(elev + elev2 + temp + temp2 + elev:temp + elev2:temp + elev:temp2)psi(elev)                    10 259.73  0.92 0.299     0.77
-p(elev + elev2 + temp + temp2 + elev:temp + elev2:temp + elev:temp2)psi(elev + elev2 + elev3)    12 260.73  1.92 0.181     0.95
-p(elev + elev2 + temp + temp2 + elev:temp + elev2:temp + elev:temp2)psi(.)                        9 263.47  4.66 0.046     1.00
-
-
-Model selection for the effects of mean june temperature on occupancy: Here, the AIC values show that the model with temperature included do have substantial support.
-
-                                                                                              nPars    AIC delta AICwt cumltvWt
-p(elev + elev2 + temp + temp2 + elev:temp + elev2:temp + elev:temp2)psi(temp + temp2)            11 260.09  0.00 0.382     0.38
-p(elev + elev2 + temp + temp2 + elev:temp + elev2:temp + elev:temp2)psi(temp)                    10 260.55  0.46 0.304     0.69
-p(elev + elev2 + temp + temp2 + elev:temp + elev2:temp + elev:temp2)psi(temp + temp2 + temp3)    12 261.00  0.90 0.243     0.93
-p(elev + elev2 + temp + temp2 + elev:temp + elev2:temp + elev:temp2)psi(.)                        9 263.47  3.38 0.071     1.00
-
-
-Model selection for the effects of habitat on occupancy (detection prob = elev+elev2+temp+temp2): Difficult to say if habitat should be included as the AICdelta is just over 2. 
-                                                                                 nPars    AIC delta AICwt cumltvWt
-p(elev + elev2 + temp + temp2 + elev:temp + elev2:temp + elev:temp2)psi(.)           9 263.47  0.00  0.79     0.79
-p(elev + elev2 + temp + temp2 + elev:temp + elev2:temp + elev:temp2)psi(habitat)    13 266.11  2.64  0.21     1.00
-
-
-
-
+### 2012 Site occupancy modelling
 Identifying the rows for the known occupancy of the 2012 detection/nondetection data
 ```{r}
 line2012 = c()
-
+lineobs = data.frame(Line_observations)
+lineobs$Art = NULL
 # for loop that appends the rows from the line observations with the year 2012 to the variable line2012
 for (row in 1:nrow(lineobs)) {
   sitenumber = lineobs[row, "RuteID"]
@@ -503,6 +448,196 @@ for(i in sitenum){
   }
 }
 ```
+
+Add detection/nondetection data and covariates together in a matrix, which makes it possible to remove the rows where there are missing covariate information. 
+Overwrite the covariate variables based on the new dataset.
+THE OCCU FUNCTION ONLY REMOVES ROWS WITH ALL NA's
+```{r}
+y2012.cov = cbind(y2012, masl.orig, precip.year.orig, avg.temp.june.orig, latitude.orig, longitude.orig, habitat.orig, sitenr)
+View(y2012.cov)
+
+y2012.cov = y2012.cov[complete.cases(y2012.cov[ , 21:25]),] # Removing rows where either of the covariates have NAs (including the y values)
+
+y2012.cov = y2012.cov[- c(480),] # Manually removed last row because the habitat.orig had a NA value in the last row that was not caught by the complete.cases function
+
+# Unstandardized covariates
+masl = y2012.cov$masl.orig
+precip = y2012.cov$precip.year.orig
+avg.temp.june = y2012.cov$avg.temp.june.orig
+latitude = y2012.cov$latitude.orig
+longitude = y2012.cov$longitude.orig
+habitat = y2012.cov$habitat.orig
+latitude = y2012.cov$latitude.orig
+sitenr = y2012.cov$sitenr
+
+```
+
+#### UnmarkedFrameOccu - 2012
+Create unmarkedFrameOccu by separating the site covariates from the observation covariates
+```{r}
+# Create the covariates for 'obsCovs', as they need to be in a matrix form. Unstandardized!
+# Habitat is regarded as the only covariate that affects the detection process
+obs.habitat = matrix(data = rep(habitat, 20), nrow = 479, ncol = 20)
+
+# Create unmarkedFrameOccu - 2012 for keeping the data
+umf.12 = unmarkedFrameOccu(y = y2012.cov[1:20], siteCovs = data.frame(masl, avg.temp.june, latitude, habitat, precip), obsCovs = list(obs.habitat = obs.habitat))
+
+```
+
+### Model selection on the detection part - 2012
+```{r}
+# formula = ~ detection ~ occupancy
+dmod1.2012 = occu(formula = ~ 1 ~ 1, data = umf.12, knownOcc = row2012)
+summary(dmod1.2012)
+
+dmod2.2012 = occu(formula = ~ obs.habitat ~ 1, data = umf.12, knownOcc = row2012)
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+d2012.fit = fitList("p(.)psi(.)" = dmod1.2012,
+               "p(habitat)psi(.)" = dmod2.2012)
+
+(dmod.2012.sel = modSel(d2012.fit))
+
+```
+
+                 nPars    AIC delta   AICwt cumltvWt
+p(habitat)psi(.)     6 427.92  0.00 0.99929     1.00
+p(.)psi(.)           2 442.41 14.49 0.00071     1.00
+
+The model selection shows that there is great support for the habitat affecting detection probability.
+
+We move on to the model selection on the occupancy part with habitat included on the detection.
+
+### Model selection on the occupancy part - 2012
+```{r}
+# formula = ~ detection ~ occupancy
+# Looking for the effects of elevation on occupancy alone and then include habitat to see if there is a difference
+om1.2012 = occu(formula = ~ 1 ~ 1, data = umf.12, knownOcc = row2012)
+
+om2.2012 = occu(formula = ~ 1 ~ masl, data = umf.12, knownOcc = row2012)
+
+om3.2012 = occu(formula = ~ 1 ~ masl + I(masl^2), data = umf.12, knownOcc = row2012)
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+o2012.fit = fitList("p(.)psi(.)" = om1.2012,
+              "p(.)psi(elevation)" = om2.2012,
+              "p(.)psi(elevation + elevation2)" = om3.2012) # This model produces NaN's. Not enough data?
+(omod.2012.sel = modSel(o2012.fit))
+summary(om2.2012)
+summary(om3.2012)
+# The best model is the one without elevation (Finnmark causing problems again!) :)
+
+# Looking for the effects of elevation on occupancy when habitat is included
+om4.2012 = occu(formula = ~ obs.habitat ~ 1, data = umf.12, knownOcc = row2012)
+
+om5.2012 = occu(formula = ~ obs.habitat ~ masl, data = umf.12, knownOcc = row2012)
+
+om6.2012 = occu(formula = ~ obs.habitat ~ masl + I(masl^2), data = umf.12, knownOcc = row2012)
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+o2012.fit1 = fitList("p(habitat)psi(.)" = om4.2012,
+              "p(habitat)psi(elevation)" = om5.2012,
+              "p(habitat)psi(elevation + elevation2)" = om6.2012)
+
+(omod.2012.sel1 = modSel(o2012.fit1))
+
+# The inclusion of habitat on the detection part as expected did not matter
+
+# Looking for the effects of temperature on occupancy when habitat is included
+om7.2012 = occu(formula = ~ obs.habitat ~ avg.temp.june, data = umf.12, knownOcc = row2012)
+
+om8.2012 = occu(formula = ~ obs.habitat ~ avg.temp.june + I(avg.temp.june^2), data = umf.12, knownOcc = row2012)
+
+om9.2012 = occu(formula = ~ obs.habitat ~ avg.temp.june + I(avg.temp.june^2) + I(avg.temp.june^3), data = umf.12, knownOcc = row2012)
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+o2012.fit2 = fitList("p(habitat)psi(.)" = om4.2012,
+              "p(habitat)psi(temp)" = om7.2012,
+              "p(habitat)psi(temp + temp2)" = om8.2012,
+              "p(habitat)psi(temp+ temp2 + temp3)" = om9.2012) # NaN's produced by this model (see below)
+
+(omod.2012.sel2 = modSel(o2012.fit2))
+# Best model with psi(temp)
+
+backTransform(linearComb(om9.2012, coefficients = c(1,0,0,0), type = 'state'))
+summary(om7.2012)
+summary(om8.2012)
+summary(om9.2012)
+# NaNs producedOccupancy (logit-scale):
+#                    Estimate  SE   z  P(>|z|)
+# (Intercept)          6.7156 NaN NaN     NaN
+# avg.temp.june       -4.7018 NaN NaN     NaN
+# I(avg.temp.june^2)   0.8511 NaN NaN     NaN
+# I(avg.temp.june^3)  -0.0483 NaN NaN     NaN
+
+# Are the NaN's produced because the dataset is so small that the optim function does not have enough data? 
+
+
+# Looking for the effects of latitude on occupancy when habitat is included first, and then see it together with temperature
+om10.2012 = occu(formula = ~ obs.habitat ~ latitude, data = umf.12, knownOcc = row2012)
+
+om11.2012 = occu(formula = ~ obs.habitat ~ latitude + I(latitude^2), data = umf.12, knownOcc = row2012)
+
+om12.2012 = occu(formula = ~ obs.habitat ~ latitude + I(latitude^2) + I(latitude^3), data = umf.12, knownOcc = row2012)
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+o2012.fit3 = fitList("p(habitat)psi(.)" = om4.2012,
+              "p(habitat)psi(lat)" = om10.2012,
+              "p(habitat)psi(lat + lat2)" = om11.2012,
+              "p(habitat)psi(lat + lat2 + lat3)" = om12.2012)
+
+(omod.2012.sel3 = modSel(o2012.fit3))
+# Latitude is not supported in this model
+
+# Looking for the effects of latitude on occupancy when habitat and temp is included
+om13.2012 = occu(formula = ~ obs.habitat ~ avg.temp.june + I(avg.temp.june^2) + latitude, data = umf.12, knownOcc = row2012)
+
+om14.2012 = occu(formula = ~ obs.habitat ~ avg.temp.june + I(avg.temp.june^2) + latitude + I(latitude^2), data = umf.12, knownOcc = row2012)
+
+om15.2012 = occu(formula = ~ obs.habitat ~ avg.temp.june + I(avg.temp.june^2) + latitude + I(latitude^2) + I(latitude^3), data = umf.12, knownOcc = row2012)
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+o2012.fit4 = fitList("p(habitat)psi(temp + temp2)" = om8.2012,
+              "p(habitat)psi(temp + temp2 + lat)" = om13.2012,
+              "p(habitat)psi(temp + temp2 + lat + lat2)" = om14.2012, # NaN's produced
+              "p(habitat)psi(temp + temp2 + lat + lat2 + lat3)" = om15.2012)
+(omod.2012.sel4 = modSel(o2012.fit4))
+# The summary's below show that it is only om14.2012 that produces NaN's, why is this?
+
+backTransform(linearComb(om13.2012, coefficients = c(1,0,0,0), type = 'state'))
+summary(om13.2012)
+summary(om14.2012)
+summary(om15.2012)
+
+# Looking for the effects of habitat without temperature included 
+om16.2012 = occu(formula = ~ obs.habitat ~ habitat, data = umf.12, knownOcc = row2012)
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+o2012.fit5 = fitList("p(habitat)psi(.)"  = om4.2012,
+                     "p(habitat)psi(habitat)" = om16.2012)
+
+(omod.2012.sel5 = modSel(o2012.fit5))
+# The best model is the one without habitat
+
+# Looking for the effects of yearly precipitation without temperature included
+om17.2012 = occu(formula = ~ obs.habitat ~ precip, data = umf.12, knownOcc = row2012)
+
+om18.2012 = occu(formula = ~ obs.habitat ~ precip + I(precip^2), data = umf.12, knownOcc = row2012)
+
+om19.2012 = occu(formula = ~ obs.habitat ~ precip + I(precip^2) + I(precip^3), data = umf.12, knownOcc = row2012)
+
+o2012.fit6 = fitList("p(habitat)psi(.)" = om4.2012,
+                     "p(habitat)psi(precip.year)" = om17.2012,
+                     "p(habitat)psi(precip.year + precip.year2)" = om18.2012,
+                     "p(habitat)psi(precip.year + precip.year2 + precip.year3)" = om17.2012)
+(omod.2012.sel6 = modSel(o2012.fit6))
+# The model with yearly precipitation psi(precip.year) included is the best
+
+```
+
+
+
+
 
 Identifying the rows for the known occupancy of the 2013 detection/nondetection data
 ```{r}
@@ -599,6 +734,7 @@ for(i in sitenum){
 
 Identifying the rows for the known occupancy of the 2016 detection/nondetection data
 ```{r}
+
 line2016 = c()
 
 # for loop that appends the rows from the line observations with the year 2016 to the variable line2016
@@ -629,9 +765,40 @@ for(i in sitenum){
 ```
 
 
+```{r}
+y2016.cov = cbind(y2016, masl, precip.year, avg.temp.june, latitude, longitude, habitat.orig, sitenr)
+View(y2016.cov)
+
+y2016.cov = y2016.cov[complete.cases(y2016.cov[ , 21:25]),] # Removing rows where either of the covariates have NAs (including the y values)
+
+y2016.cov = y2016.cov[- c(480),] # Manually removed last row because the habitat.orig had a NA value in the last row that was not caught by the complete.cases function
+
+masl.2011 = y2011.cov$masl
+precip.2011 = y2011.cov$precip.year
+avg.temp.june.2011 = y2011.cov$avg.temp.june
+latitude.2011 = y2011.cov$latitude
+longitude.2011 = y2011.cov$longitude
+habitat.2011 = y2011.cov$habitat.orig
+latitude.2011 = y2011.cov$latitude
+sitenr.2011 = y2011.cov$sitenr
 
 
+```
 
+```{r}
+umf.test = unmarkedFrameOccu(y = y2016.cov[1:20], siteCovs = data.frame(avg.temp.june.2011), obsCovs = list(obs.habitat.2011 = obs.habitat.2011))
+
+test.mod = occu(formula = ~ 1 ~ 1, data = umf.test, knownOcc = row2016)
+summary(test.mod)
+
+test.mod1 = occu(formula = ~ obs.habitat.2011 ~ 1, data = umf.test, knownOcc = row2016)
+
+# Insert the fitted models into a "fitList" and rank them by AIC
+test.fit = fitList("p(.)psi(.)" = test.mod,
+               "p(habitat)psi(.)" = test.mod1)
+
+(test.model.sel = modSel(test.fit))
+```
 
 
 
